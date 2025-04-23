@@ -2,8 +2,9 @@ module Parser (parseExpressions, FExp (..), FOperator (..), Directive (..)) wher
 
 import Control.Applicative
 import Data.Void (Void)
-import Text.Megaparsec (MonadParsec (notFollowedBy), Parsec, manyTill, parse, skipMany, skipSome, try)
+import Text.Megaparsec (MonadParsec (notFollowedBy), Parsec, manyTill, skipMany, skipSome, try)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, printChar, spaceChar, string')
+import Text.Megaparsec.Char.Lexer (skipLineComment)
 
 type FParser = Parsec Void String
 
@@ -81,16 +82,13 @@ parseDirective = do
 parseExpression :: FParser FExp
 parseExpression = parseInteger <|> parseOperator <|> parsePrintString <|> parseDirective
 
-spaces :: FParser ()
-spaces = skipSome spaceChar
-
-optionalSpaces :: FParser ()
-optionalSpaces = skipMany spaceChar
+sc :: FParser ()
+sc = skipMany (skipSome spaceChar <|> skipLineComment "\\")
 
 parseExpressions :: FParser [FExp]
 parseExpressions = do
-  optionalSpaces
-  first <- parseExpression
-  rest <- many $ spaces >> parseExpression
-  optionalSpaces
-  return (first : rest)
+  sc
+  many $ do
+    e <- parseExpression
+    sc
+    return e
