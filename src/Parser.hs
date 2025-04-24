@@ -5,14 +5,15 @@ module Parser
     FUnOperator (..),
     Directive (..),
     Definition (..),
+    FNode (..),
   )
 where
 
 import Control.Applicative
-import Control.Monad (when)
+import Control.Monad (unless, void, when)
 import qualified Data.Set as Set
 import Data.Void (Void)
-import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, notFollowedBy), Parsec, fancyFailure, manyTill, option, skipMany, skipSome, try)
+import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, lookAhead, notFollowedBy), Parsec, fancyFailure, manyTill, option, skipMany, skipSome, try)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, printChar, spaceChar, string', symbolChar)
 import Text.Megaparsec.Char.Lexer (skipLineComment)
 
@@ -47,10 +48,11 @@ data Directive
   | Cr
   | DotString String
   | If
+  | Else
   | Then
   deriving (Show, Eq)
 
-data Definition = Definition String [FExp]
+data Definition = Definition String [FNode]
   deriving (Show, Eq)
 
 data FExp
@@ -59,7 +61,13 @@ data FExp
   | FUnOp FUnOperator
   | FDirective Directive
   | FWord String
-  | FDefine Definition
+  deriving (Show, Eq)
+
+data FNode
+  = Literal FExp
+  | WordDef Definition
+  | IfThenElse FNode [FNode] [FNode]
+  | Sequence [FNode]
   deriving (Show, Eq)
 
 fFail :: String -> FParser a
@@ -119,6 +127,7 @@ parseDirectiveWord =
     <|> (Emit <$ symbol "emit")
     <|> (Cr <$ symbol "cr")
     <|> (If <$ symbol "if")
+    <|> (Else <$ symbol "else")
     <|> (Then <$ symbol "then")
 
 parseDirective :: FParser FExp
@@ -131,11 +140,11 @@ parseWordName = try $ some (alphaNumChar <|> symbolChar)
 parseWord :: FParser FExp
 parseWord = do
   name <- parseWordName
-  if name `elem` [":", ";", "dup", "drop", "swap", "over", "rot", "clear", ".s", ".", "emit", "cr", ".\""]
-    then fail $ "Unexpected keyword: " ++ name
+  if name `elem` [":", ";", "dup", "drop", "swap", "over", "rot", "clear", ".s", ".", "emit", "cr", ".\"", "if", "else", "then"]
+    then fail $ "unexpected keyword: " ++ name
     else return $ FWord name
 
-parseDefinition :: FParser FExp
+parseDefinition :: FParser FNode
 parseDefinition = do
   _ <- try $ symbol ":"
   sc
@@ -145,23 +154,72 @@ parseDefinition = do
   atEnd <- option False (eof >> return True)
   when atEnd $ fFail "error: unexpected end of input after definition name"
 
-  body <- manyTill (parseExpression' <* sc) (try $ symbol ";")
+  body <- parseBlock (symbol ";")
 
-  return $ FDefine (Definition name body)
+  return $ WordDef (Definition name body)
 
-parseExpression' :: FParser FExp
-parseExpression' = parseInteger <|> parseOperator <|> parsePrintString <|> parseDirective <|> parseWord
+parseBlock :: FParser String -> FParser [FNode]
+parseBlock endMark = do
+  exprs <- many $ do
+    notFollowedBy endMark
 
-parseExpression :: FParser FExp
-parseExpression = parseDefinition <|> parseExpression'
+    expr <- try parseIfThenElse <|> parseExpression
+    sc
+
+    return expr
+
+  _ <- endMark
+
+  return exprs
+
+parseIfThenElse :: FParser FNode
+parseIfThenElse = do
+  _ <- try $ symbol "if"
+  sc
+
+  thenBranch <- many $ do
+    notFollowedBy (symbol "else" <|> symbol "then")
+    expr <- try parseIfThenElse <|> parseExpression
+    sc
+    return expr
+
+  hasElse <- option False (symbol "else" >> return True)
+
+  elseBranch <-
+    if hasElse
+      then many $ do
+        notFollowedBy (symbol "then")
+        expr <- try parseIfThenElse <|> parseExpression
+        sc
+        return expr
+      else return []
+
+  _ <- symbol "then"
+
+  let condition = Literal (FWord "_condition_placeholder_")
+
+  return $ IfThenElse condition thenBranch elseBranch
+
+parseExpression :: FParser FNode
+parseExpression =
+  try parseIfThenElse
+    <|> (Literal <$> (parseInteger <|> parseOperator <|> parsePrintString <|> parseDirective <|> parseWord))
 
 sc :: FParser ()
 sc = skipMany (skipSome spaceChar <|> skipLineComment "\\")
 
-parseExpressions :: FParser [FExp]
+parseNode :: FParser FNode
+parseNode =
+  try parseDefinition
+    <|> try parseIfThenElse
+    <|> parseExpression
+
+parseExpressions :: FParser FNode
 parseExpressions = do
   sc
-  many $ do
-    e <- parseExpression
+  nodes <- many $ do
+    e <- parseNode
     sc
     return e
+
+  return $ Sequence nodes
