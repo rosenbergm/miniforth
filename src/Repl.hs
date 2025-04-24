@@ -1,10 +1,14 @@
 module Repl where
 
+import Control.Monad.Reader (MonadReader (ask, local), ReaderT (runReaderT))
 import Control.Monad.State.Strict
 import qualified Data.List as List
-import Eval (evaluate)
+import qualified Data.Map as Map
+import Eval (Context, evaluate)
 import qualified Stack as S
 import System.Console.Haskeline
+
+type ForthM a = ReaderT Context (StateT (S.Stack Integer) IO) a
 
 forthCompletion :: CompletionFunc IO
 forthCompletion = completeWord Nothing [] forthCompleter
@@ -24,17 +28,18 @@ settings =
     }
 
 repl :: IO ()
-repl = evalStateT replLoop S.empty
+repl = evalStateT (runReaderT replLoop Map.empty) S.empty
   where
-    replLoop :: StateT (S.Stack Integer) IO ()
+    replLoop :: ForthM ()
     replLoop = do
       liftIO $ putStrLn "\nthis is miniforth. type :help for help or :q to exit."
 
       replWithStack
 
-    replWithStack :: StateT (S.Stack Integer) IO ()
+    replWithStack :: ForthM ()
     replWithStack = do
-      stack <- get
+      stack <- lift get
+      ctx <- ask
 
       input <- liftIO $ runInputT settings $ getInputLine ">>> "
 
@@ -51,11 +56,15 @@ repl = evalStateT replLoop S.empty
               \  :clear - clear the stack"
           replWithStack
         Just ":clear" -> do
-          put S.empty
+          lift $ put S.empty
           liftIO $ putStrLn "stack cleared"
           replWithStack
-        Just line -> do
-          let (result, newStack) = evaluate line stack
-          put newStack
-          liftIO $ putStrLn result
+        Just ":words" -> do
+          ctx' <- ask
+          liftIO $ putStrLn $ "Defined words: " ++ show (Map.keys ctx')
           replWithStack
+        Just line -> do
+          let (result, newCtx, newStack) = evaluate ctx line stack
+          lift $ put newStack
+          liftIO $ putStrLn result
+          local (const newCtx) replWithStack

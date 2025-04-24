@@ -1,7 +1,8 @@
 module File where
 
-import Control.Monad (foldM_, unless)
-import Eval (evaluate)
+import Control.Monad (unless)
+import qualified Data.Map as Map
+import Eval (Context, evaluate)
 import qualified Stack as S
 import System.IO (IOMode (ReadMode), hClose, hGetContents, openFile)
 
@@ -12,14 +13,16 @@ runFile path = do
 
   let programLines = lines contents
 
-  foldM_ processLine S.empty programLines
+  processLines Map.empty S.empty programLines
 
   hClose handle
   where
-    processLine :: S.Stack Integer -> String -> IO (S.Stack Integer)
-    processLine stack line = do
-      let (result, newStack) = evaluate line stack
+    processLines :: Context -> S.Stack Integer -> [String] -> IO ()
+    processLines _ _ [] = return ()
+    processLines ctx stack (line : rest) = do
+      let (result, newCtx, newStack) = evaluate ctx line stack
+
       unless (result == "ok") $
-        putStrLn
-          result
-      return newStack
+        putStrLn result
+
+      processLines newCtx newStack rest
