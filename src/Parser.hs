@@ -23,6 +23,7 @@ data FBinOperator
   | FMul
   | FSub
   | FDiv
+  | FMod
   | FEq
   | FLt
   | FGt
@@ -79,6 +80,7 @@ parseBinaryOperator =
     <|> (FMul <$ char '*')
     <|> (FSub <$ char '-')
     <|> (FDiv <$ char '/')
+    <|> (FMod <$ string' "mod")
     <|> (FEq <$ char '=')
     <|> (FLt <$ char '<')
     <|> (FGt <$ char '>')

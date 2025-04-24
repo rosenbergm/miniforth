@@ -35,6 +35,10 @@ eval ctx (FBinOp op : xs) stack =
                 if x1 == 0
                   then Left "division by zero"
                   else Right (x2 `div` x1)
+              FMod ->
+                if x1 == 0
+                  then Left "division by zero"
+                  else Right (x2 `mod` x1)
               FEq -> Right $ if x2 == x1 then -1 else 0
               FLt -> Right $ if x2 < x1 then -1 else 0
               FGt -> Right $ if x2 > x1 then -1 else 0
