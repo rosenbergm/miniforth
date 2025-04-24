@@ -4,6 +4,7 @@ import Control.Monad.Reader (MonadReader (ask, local), ReaderT (runReaderT))
 import Control.Monad.State.Strict
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Maybe as Maybe
 import Eval (Context, evaluate)
 import qualified Stack as S
 import System.Console.Haskeline
@@ -64,7 +65,7 @@ repl = evalStateT (runReaderT replLoop Map.empty) S.empty
           liftIO $ putStrLn $ "Defined words: " ++ show (Map.keys ctx')
           replWithStack
         Just line -> do
-          let (result, newCtx, newStack) = evaluate ctx line stack
+          let (newCtx, result, newStack) = evaluate ctx line stack
           lift $ put newStack
-          liftIO $ putStrLn result
+          liftIO $ putStrLn $ Maybe.fromMaybe "ok" result
           local (const newCtx) replWithStack

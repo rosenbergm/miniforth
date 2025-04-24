@@ -1,7 +1,7 @@
 module File where
 
-import Control.Monad (unless)
 import qualified Data.Map as Map
+import Data.Maybe
 import Eval (Context, evaluate)
 import qualified Stack as S
 import System.IO (IOMode (ReadMode), hClose, hGetContents, openFile)
@@ -20,9 +20,8 @@ runFile path = do
     processLines :: Context -> S.Stack Integer -> [String] -> IO ()
     processLines _ _ [] = return ()
     processLines ctx stack (line : rest) = do
-      let (result, newCtx, newStack) = evaluate ctx line stack
+      let (newCtx, result, newStack) = evaluate ctx line stack
 
-      unless (result == "ok") $
-        putStrLn result
+      putStrLn $ fromMaybe "ok" result
 
       processLines newCtx newStack rest

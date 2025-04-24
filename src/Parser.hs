@@ -1,4 +1,12 @@
-module Parser (parseExpressions, FExp (..), FOperator (..), Directive (..), Definition (..)) where
+module Parser
+  ( parseExpressions,
+    FExp (..),
+    FBinOperator (..),
+    FUnOperator (..),
+    Directive (..),
+    Definition (..),
+  )
+where
 
 import Control.Applicative
 import Control.Monad (when)
@@ -10,7 +18,19 @@ import Text.Megaparsec.Char.Lexer (skipLineComment)
 
 type FParser = Parsec Void String
 
-data FOperator = FAdd | FMul | FSub | FDiv
+data FBinOperator
+  = FAdd
+  | FMul
+  | FSub
+  | FDiv
+  | FEq
+  | FLt
+  | FGt
+  | FAnd
+  | FOr
+  deriving (Show, Eq)
+
+data FUnOperator = FNeg
   deriving (Show, Eq)
 
 data Directive
@@ -32,7 +52,8 @@ data Definition = Definition String [FExp]
 
 data FExp
   = FNum Integer
-  | FOp FOperator
+  | FBinOp FBinOperator
+  | FUnOp FUnOperator
   | FDirective Directive
   | FWord String
   | FDefine Definition
@@ -52,16 +73,25 @@ parseInteger = do
   n <- some digitChar
   return $ FNum (read n)
 
-parseOperatorChar :: FParser FOperator
-parseOperatorChar =
+parseBinaryOperator :: FParser FBinOperator
+parseBinaryOperator =
   (FAdd <$ char '+')
     <|> (FMul <$ char '*')
     <|> (FSub <$ char '-')
     <|> (FDiv <$ char '/')
+    <|> (FEq <$ char '=')
+    <|> (FLt <$ char '<')
+    <|> (FGt <$ char '>')
+    <|> (FAnd <$ string' "and")
+    <|> (FOr <$ string' "or")
+
+parseUnaryOperator :: FParser FUnOperator
+parseUnaryOperator = FNeg <$ string' "invert"
 
 parseOperator :: FParser FExp
 parseOperator = do
-  FOp <$> parseOperatorChar
+  (FBinOp <$> parseBinaryOperator)
+    <|> (FUnOp <$> parseUnaryOperator)
 
 parseString :: FParser String
 parseString = manyTill printChar (char '"')

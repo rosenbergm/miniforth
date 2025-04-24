@@ -2,10 +2,8 @@ module Eval (evaluate, Context) where
 
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Maybe as Maybe
 import Parser
 import qualified Stack as S
-import System.IO.Unsafe (unsafePerformIO)
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
 
@@ -16,7 +14,16 @@ eval ctx [] stack = Right (Nothing, ctx, stack)
 eval ctx (FNum n : xs) stack =
   let newStack = S.push n stack
    in eval ctx xs newStack
-eval ctx (FOp op : xs) stack =
+eval ctx (FUnOp op : xs) stack =
+  case S.pop stack of
+    Just (x, stack') ->
+      let result = case op of
+            FNeg -> Right $ if x == 0 then -1 else 0
+       in case result of
+            Left err -> Left err
+            Right val -> eval ctx xs (S.push val stack')
+    Nothing -> Left "stack underflow"
+eval ctx (FBinOp op : xs) stack =
   case S.pop stack of
     Just (x1, stack') -> case S.pop stack' of
       Just (x2, stack'') ->
@@ -28,6 +35,11 @@ eval ctx (FOp op : xs) stack =
                 if x1 == 0
                   then Left "division by zero"
                   else Right (x2 `div` x1)
+              FEq -> Right $ if x2 == x1 then -1 else 0
+              FLt -> Right $ if x2 < x1 then -1 else 0
+              FGt -> Right $ if x2 > x1 then -1 else 0
+              FAnd -> Right $ if x2 /= 0 && x1 /= 0 then -1 else 0
+              FOr -> Right $ if x2 /= 0 || x1 /= 0 then -1 else 0
          in case result of
               Left err -> Left err
               Right val -> eval ctx xs (S.push val stack'')
@@ -108,12 +120,12 @@ eval ctx (FWord name : xs) stack = do
               Right (Just (out ++ restOut), finalDict, finalStack)
     Nothing -> Left $ name ++ " ?"
 
-evaluate :: Context -> String -> S.Stack Integer -> (String, Context, S.Stack Integer)
-evaluate ctx input currentStack = unsafePerformIO $ do
-  return $ case parse parseExpressions "" input of
-    Left err -> (errorBundlePretty err, ctx, currentStack)
+evaluate :: Context -> String -> S.Stack Integer -> (Context, Maybe String, S.Stack Integer)
+evaluate ctx input currentStack =
+  case parse parseExpressions "" input of
+    Left err -> (ctx, Just $ errorBundlePretty err, currentStack)
     Right expressions ->
       case eval ctx expressions currentStack of
-        Left errorMsg -> (errorMsg, ctx, currentStack)
+        Left errorMsg -> (ctx, Just errorMsg, currentStack)
         Right (output, newDict, newStack) ->
-          (Maybe.fromMaybe "ok" output, newDict, newStack)
+          (newDict, output, newStack)
