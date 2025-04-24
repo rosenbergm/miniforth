@@ -9,6 +9,11 @@ import Text.Megaparsec.Error (errorBundlePretty)
 
 type Context = Map.Map String [FExp]
 
+skipToThen :: [FExp] -> Either String [FExp]
+skipToThen [] = Left "Missing 'then'"
+skipToThen (FDirective Then : rest) = Right rest
+skipToThen (_ : xs) = skipToThen xs
+
 eval :: Context -> [FExp] -> S.Stack Integer -> Either String (Maybe String, Context, S.Stack Integer)
 eval ctx [] stack = Right (Nothing, ctx, stack)
 eval ctx (FNum n : xs) stack =
@@ -105,6 +110,16 @@ eval ctx (FDirective dir : xs) stack =
       case result of
         (Nothing, finalCtx, finalStack) -> Right (Just str, finalCtx, finalStack)
         (Just output, finalCtx, finalStack) -> Right (Just $ str ++ output, finalCtx, finalStack)
+    If ->
+      case S.pop stack of
+        Just (cond, stack') ->
+          if cond /= 0
+            then eval ctx xs stack'
+            else case skipToThen xs of
+              Left err -> Left err
+              Right afterThen -> eval ctx afterThen stack'
+        Nothing -> Left "stack underflow"
+    Then -> eval ctx xs stack
 eval ctx (FDefine (Definition name body) : xs) stack = do
   let ctx' = Map.insert name body ctx
   eval ctx' xs stack

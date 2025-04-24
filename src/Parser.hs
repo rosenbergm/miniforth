@@ -46,6 +46,8 @@ data Directive
   | Emit
   | Cr
   | DotString String
+  | If
+  | Then
   deriving (Show, Eq)
 
 data Definition = Definition String [FExp]
@@ -116,6 +118,8 @@ parseDirectiveWord =
     <|> (Dot <$ symbol ".")
     <|> (Emit <$ symbol "emit")
     <|> (Cr <$ symbol "cr")
+    <|> (If <$ symbol "if")
+    <|> (Then <$ symbol "then")
 
 parseDirective :: FParser FExp
 parseDirective = do
