@@ -185,6 +185,10 @@ ok
 21
 ```
 
+### `exit` - break execution
+
+Breaks the execution of the current word and returns to the REPL.
+
 ## Examples
 
 There are some examples in the `examples` directory. You can load them into the
