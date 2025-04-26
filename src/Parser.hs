@@ -158,7 +158,7 @@ reservedKeywords =
   ]
 
 parseWordName :: FParser String
-parseWordName = try $ some (alphaNumChar <|> symbolChar)
+parseWordName = some (alphaNumChar <|> symbolChar)
 
 parseWord :: FParser FExp
 parseWord = do
@@ -169,7 +169,7 @@ parseWord = do
 
 parseDefinition :: FParser FNode
 parseDefinition = do
-  _ <- try $ symbol ":"
+  _ <- symbol ":"
   sc
   name <- parseWordName
   sc
@@ -177,7 +177,13 @@ parseDefinition = do
   atEnd <- option False (eof >> return True)
   when atEnd $ fFail "error: unexpected end of input after definition name"
 
-  body <- parseBlock (symbol ";")
+  body <-
+    try (parseBlock $ symbol ";") <|> do
+      _ <- many (notFollowedBy eof >> parseNode')
+      atEnd' <- option False (eof >> return True)
+      if atEnd'
+        then fFail "error: incomplete definition, missing ';'"
+        else fFail "error: malformed definition body"
 
   return $ WordDef (Definition name body)
 
@@ -250,8 +256,7 @@ parseNode' = try parseIfThenElse <|> try parseDoLoop <|> parseExpression
 
 parseNode :: FParser FNode
 parseNode =
-  try parseDefinition
-    <|> parseNode'
+  parseDefinition <|> parseNode'
 
 parseExpressions :: FParser FNode
 parseExpressions = do
