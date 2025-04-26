@@ -86,16 +86,10 @@ evalDirective ctx dir stack =
         Nothing -> Left "stack underflow"
     Cr -> Right (Just "\n", ctx, stack)
     DotString str -> Right (Just str, ctx, stack)
-    If -> Left "if directive should be handled as an IfThenElse node"
-    Else -> Left "else directive should be handled as an IfThenElse node"
-    Then -> Left "then directive should be handled as part of an IfThenElse node"
     I ->
-      -- Special handling for 'i' directive
       case S.peek stack of
         Just _loopIdx -> Right (Nothing, ctx, stack)
         Nothing -> Left "i directive requires a loop index on the stack"
-    Do -> Left "'do' directive should be handled as part of loop evaluation"
-    Loop -> Left "'loop' directive should be handled as part of loop evaluation"
 
 evalWord :: Context -> String -> [String] -> S.Stack Integer -> Either String (Maybe String, Context, S.Stack Integer)
 evalWord ctx name callStack stack =

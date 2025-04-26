@@ -13,7 +13,7 @@ import Control.Applicative
 import Control.Monad (unless, void, when)
 import qualified Data.Set as Set
 import Data.Void (Void)
-import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, lookAhead, notFollowedBy), Parsec, fancyFailure, manyTill, option, skipMany, skipSome, try)
+import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, lookAhead, notFollowedBy), Parsec, choice, fancyFailure, manyTill, option, skipMany, skipSome, try)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, printChar, spaceChar, string', symbolChar)
 import Text.Megaparsec.Char.Lexer (skipLineComment)
 
@@ -47,11 +47,6 @@ data Directive
   | Emit
   | Cr
   | DotString String
-  | If
-  | Else
-  | Then
-  | Do
-  | Loop
   | I
   deriving (Show, Eq)
 
@@ -110,7 +105,10 @@ parseOperator = do
     <|> (FUnOp <$> parseUnaryOperator)
 
 parseString :: FParser String
-parseString = manyTill printChar (char '"')
+parseString = manyTill charOrEscape (char '"')
+  where
+    charOrEscape = try escapedQuote <|> printChar
+    escapedQuote = char '\\' >> char '"' >> return '"'
 
 parsePrintString :: FParser FExp
 parsePrintString = do
@@ -130,16 +128,33 @@ parseDirectiveWord =
     <|> (Dot <$ symbol ".")
     <|> (Emit <$ symbol "emit")
     <|> (Cr <$ symbol "cr")
-    <|> (If <$ symbol "if")
-    <|> (Else <$ symbol "else")
-    <|> (Then <$ symbol "then")
-    <|> (Do <$ symbol "do")
-    <|> (Loop <$ symbol "loop")
     <|> (I <$ symbol "i")
 
 parseDirective :: FParser FExp
-parseDirective = do
-  FDirective <$> parseDirectiveWord
+parseDirective = FDirective <$> parseDirectiveWord
+
+reservedKeywords :: [String]
+reservedKeywords =
+  [ ":",
+    ";",
+    "dup",
+    "drop",
+    "swap",
+    "over",
+    "rot",
+    "clear",
+    ".s",
+    ".",
+    "emit",
+    "cr",
+    ".\"",
+    "if",
+    "else",
+    "then",
+    "do",
+    "loop",
+    "i"
+  ]
 
 parseWordName :: FParser String
 parseWordName = try $ some (alphaNumChar <|> symbolChar)
@@ -147,7 +162,7 @@ parseWordName = try $ some (alphaNumChar <|> symbolChar)
 parseWord :: FParser FExp
 parseWord = do
   name <- parseWordName
-  if name `elem` [":", ";", "dup", "drop", "swap", "over", "rot", "clear", ".s", ".", "emit", "cr", ".\"", "if", "else", "then", "do", "loop"]
+  if name `elem` reservedKeywords
     then fail $ "unexpected keyword: " ++ name
     else return $ FWord name
 
@@ -169,36 +184,36 @@ parseBlock :: FParser String -> FParser [FNode]
 parseBlock endMark = do
   exprs <- many $ do
     notFollowedBy endMark
-
-    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+    expr <- parseNode'
     sc
-
     return expr
 
   _ <- endMark
 
   return exprs
 
+parseUntil :: [FParser String] -> FParser [FNode]
+parseUntil endMarks = do
+  many $ do
+    notFollowedBy (choice endMarks)
+    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+    sc
+    return expr
+
 parseIfThenElse :: FParser FNode
 parseIfThenElse = do
   _ <- try $ symbol "if"
   sc
 
-  thenBranch <- many $ do
-    notFollowedBy (symbol "else" <|> symbol "then")
-    expr <- try parseIfThenElse <|> parseExpression
-    sc
-    return expr
+  thenBranch <- parseUntil [symbol "else", symbol "then"]
 
-  hasElse <- option False (symbol "else" >> return True)
+  hasElse <- option False (try $ symbol "else" >> return True)
+
+  sc
 
   elseBranch <-
     if hasElse
-      then many $ do
-        notFollowedBy (symbol "then")
-        expr <- try parseIfThenElse <|> parseExpression
-        sc
-        return expr
+      then parseUntil [symbol "then"]
       else return []
 
   _ <- symbol "then"
@@ -212,11 +227,7 @@ parseDoLoop = do
   _ <- try $ symbol "do"
   sc
 
-  body <- many $ do
-    notFollowedBy (symbol "loop")
-    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
-    sc
-    return expr
+  body <- parseUntil [symbol "loop"]
 
   _ <- symbol "loop"
 
@@ -224,19 +235,24 @@ parseDoLoop = do
 
 parseExpression :: FParser FNode
 parseExpression =
-  try parseDoLoop
-    <|> try parseIfThenElse
-    <|> (Literal <$> (parseInteger <|> parseOperator <|> parsePrintString <|> parseDirective <|> parseWord))
+  Literal
+    <$> ( parseInteger
+            <|> parseOperator
+            <|> parsePrintString
+            <|> parseDirective
+            <|> parseWord
+        )
 
 sc :: FParser ()
 sc = skipMany (skipSome spaceChar <|> skipLineComment "\\")
 
+parseNode' :: FParser FNode
+parseNode' = try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+
 parseNode :: FParser FNode
 parseNode =
   try parseDefinition
-    <|> try parseIfThenElse
-    <|> try parseDoLoop
-    <|> parseExpression
+    <|> parseNode'
 
 parseExpressions :: FParser FNode
 parseExpressions = do
