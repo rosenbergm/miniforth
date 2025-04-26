@@ -11,10 +11,10 @@ module Parser
 where
 
 import Control.Applicative
-import Control.Monad (unless, void, when)
+import Control.Monad (when)
 import qualified Data.Set as Set
 import Data.Void (Void)
-import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, lookAhead, notFollowedBy), Parsec, choice, fancyFailure, manyTill, option, skipMany, skipSome, try)
+import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, notFollowedBy), Parsec, choice, fancyFailure, manyTill, option, skipMany, skipSome, try)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, printChar, spaceChar, string', symbolChar)
 import Text.Megaparsec.Char.Lexer (skipLineComment)
 

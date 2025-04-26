@@ -1,4 +1,4 @@
-module Repl where
+module Repl (repl) where
 
 import Control.Exception (Exception (..), catch)
 import Control.Monad.Reader (MonadReader (ask, local), ReaderT (runReaderT))
