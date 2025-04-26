@@ -154,7 +154,7 @@ eval ctx (Literal expr) cs stack =
 eval ctx (WordDef (Definition name body)) cs stack = do
   Right (Nothing, Map.insert name body ctx, stack)
 eval ctx (Sequence nodes) cs stack = evalSequence ctx nodes cs stack
-eval ctx (IfThenElse _ thenBranch elseBranch) callStack stack =
+eval ctx (IfThenElse thenBranch elseBranch) callStack stack =
   case S.pop stack of
     Just (val, stack') ->
       if val /= 0

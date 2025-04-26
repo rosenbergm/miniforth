@@ -64,7 +64,7 @@ data FExp
 data FNode
   = Literal FExp
   | WordDef Definition
-  | IfThenElse FNode [FNode] [FNode]
+  | IfThenElse [FNode] [FNode]
   | DoLoop [FNode]
   | Sequence [FNode]
   deriving (Show, Eq)
@@ -218,9 +218,7 @@ parseIfThenElse = do
 
   _ <- symbol "then"
 
-  let condition = Literal (FWord "_condition_placeholder_")
-
-  return $ IfThenElse condition thenBranch elseBranch
+  return $ IfThenElse thenBranch elseBranch
 
 parseDoLoop :: FParser FNode
 parseDoLoop = do
