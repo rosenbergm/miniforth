@@ -6,6 +6,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Eval (Context, evaluate)
+import Parser (reservedKeywords)
 import qualified Stack as S
 import System.Console.Haskeline
 
@@ -16,8 +17,7 @@ forthCompletion = completeWord Nothing [] forthCompleter
   where
     forthCompleter :: String -> IO [Completion]
     forthCompleter str = do
-      let words = ["dup", "drop", "swap", "over", "rot", "clear", ".", ".s", "emit", "cr", ".\""]
-          matches = filter (List.isPrefixOf str) words
+      let matches = filter (List.isPrefixOf str) reservedKeywords
       return $ map simpleCompletion matches
 
 settings :: Settings IO
