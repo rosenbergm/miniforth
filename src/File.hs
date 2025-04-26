@@ -1,10 +1,10 @@
-module File where
+module File (fetchProgram, runFile) where
 
 import qualified Data.Map as Map
 import Data.Maybe
 import Eval (Context, evaluate)
 import qualified Stack as S
-import System.IO (IOMode (ReadMode), hClose, hGetContents, openFile)
+import System.IO (Handle, IOMode (ReadMode), hClose, hGetContents, openFile)
 
 runFile :: FilePath -> IO ()
 runFile path = do
@@ -25,3 +25,10 @@ runFile path = do
       putStrLn $ fromMaybe "ok" result
 
       processLines newCtx newStack rest
+
+fetchProgram :: FilePath -> IO (String, Handle)
+fetchProgram path = do
+  handle <- openFile path ReadMode
+  contents <- hGetContents handle
+
+  return (contents, handle)

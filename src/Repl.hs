@@ -6,9 +6,11 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Maybe as Maybe
 import Eval (Context, evaluate)
+import File (fetchProgram)
 import Parser (reservedKeywords)
 import qualified Stack as S
 import System.Console.Haskeline
+import System.IO (hClose)
 
 type ForthM a = ReaderT Context (StateT (S.Stack Integer) IO) a
 
@@ -63,6 +65,17 @@ repl = evalStateT (runReaderT replLoop Map.empty) S.empty
         Just ":words" -> do
           ctx' <- ask
           liftIO $ putStrLn $ "Defined words: " ++ show (Map.keys ctx')
+          replWithStack
+        Just ":l" -> do
+          liftIO $ putStrLn "loading file..."
+          (file, handle) <- liftIO $ fetchProgram "examples/fib.forth"
+          let (newCtx, result, newStack) = evaluate ctx file stack
+
+          lift $ put newStack
+          liftIO $ putStrLn $ Maybe.fromMaybe "ok" result
+          local (const newCtx) replWithStack
+        Just ":load" -> do
+          liftIO $ putStrLn "loading file..."
           replWithStack
         Just line -> do
           let (newCtx, result, newStack) = evaluate ctx line stack
