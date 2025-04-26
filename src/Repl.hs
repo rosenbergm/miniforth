@@ -17,6 +17,15 @@ import System.IO.Error (isDoesNotExistError)
 
 type ForthM a = ReaderT Context IO a
 
+helpMsg :: String
+helpMsg =
+  "miniforth help\n\
+  \:h or :help - show this help message\n\
+  \:q or :quit - exit the interpreter\n\
+  \:clear - clear the stack\n\
+  \:words - show defined words\n\
+  \:l <path> or :load <path> - load a file\n"
+
 commands :: [String]
 commands =
   [ ":help",
@@ -73,13 +82,10 @@ repl = runReaderT replLoop Context.empty
           (":l", args) -> do
             ctx <- ask
             loadFile args ctx
+          (":h", _) -> do
+            liftIO $ putStrLn helpMsg
           (":help", _) -> do
-            liftIO $
-              putStrLn
-                "available commands:\n\
-                \  :help - display this help message\n\
-                \  :q, :quit - exit the interpreter\n\
-                \  :clear - clear the stack"
+            liftIO $ putStrLn helpMsg
 
             replWithStack
           (":q", _) -> return ()

@@ -48,6 +48,7 @@ data Directive
   | Emit
   | Cr
   | DotString String
+  | Exit
   deriving (Show, Eq)
 
 data Definition = Definition String [FNode]
@@ -128,6 +129,7 @@ parseDirectiveWord =
     <|> (Dot <$ symbol ".")
     <|> (Emit <$ symbol "emit")
     <|> (Cr <$ symbol "cr")
+    <|> (Exit <$ symbol "exit")
 
 parseDirective :: FParser FExp
 parseDirective = FDirective <$> parseDirectiveWord
@@ -151,7 +153,8 @@ reservedKeywords =
     "else",
     "then",
     "do",
-    "loop"
+    "loop",
+    "exit"
   ]
 
 parseWordName :: FParser String

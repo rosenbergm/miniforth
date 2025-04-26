@@ -7,9 +7,13 @@ import Parser
 import qualified Stack as S
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Util
 
-type EvalResult = Either String (Maybe String, Context)
+data Output
+  = None
+  | Message String
+  | Quit
+
+type EvalResult = Either String (Output, Context)
 
 evalUnaryOp :: Context.Context -> FUnOperator -> EvalResult
 evalUnaryOp ctx op =
@@ -19,7 +23,7 @@ evalUnaryOp ctx op =
             FNeg -> Right $ if x == 0 then -1 else 0
        in case result of
             Left err -> Left err
-            Right val -> Right (Nothing, flip withStack ctx $ S.push val stack')
+            Right val -> Right (None, flip withStack ctx $ S.push val stack')
     Nothing -> Left "stack underflow"
 
 evalBinaryOp :: Context -> FBinOperator -> EvalResult
@@ -44,7 +48,7 @@ evalBinaryOp ctx op = do
         FGt -> Right $ if x2 > x1 then -1 else 0
         FAnd -> Right $ if x2 /= 0 && x1 /= 0 then -1 else 0
         FOr -> Right $ if x2 /= 0 || x1 /= 0 then -1 else 0
-        >>= \value -> Right (Nothing, flip withStack ctx $ S.push value stack')
+        >>= \value -> Right (None, flip withStack ctx $ S.push value stack')
   where
     stack = valueStack ctx
 
@@ -53,38 +57,39 @@ evalDirective ctx dir =
   case dir of
     Dup ->
       case S.peek stack of
-        Just x -> Right (Nothing, flip withStack ctx $ S.push x stack)
+        Just x -> Right (None, flip withStack ctx $ S.push x stack)
         Nothing -> Left "stack underflow"
     Drop ->
       case S.pop stack of
-        Just (_, stack') -> Right (Nothing, withStack stack' ctx)
+        Just (_, stack') -> Right (None, withStack stack' ctx)
         Nothing -> Left "stack underflow"
     Swap ->
       case S.swap stack of
-        Just stack' -> Right (Nothing, withStack stack' ctx)
+        Just stack' -> Right (None, withStack stack' ctx)
         Nothing -> Left "stack underflow"
     Over ->
       case S.over stack of
-        Just stack' -> Right (Nothing, withStack stack' ctx)
+        Just stack' -> Right (None, withStack stack' ctx)
         Nothing -> Left "stack underflow"
     Rot ->
       case S.rot stack of
-        Just stack' -> Right (Nothing, withStack stack' ctx)
+        Just stack' -> Right (None, withStack stack' ctx)
         Nothing -> Left "stack underflow"
-    Clear -> Right (Nothing, withStack S.empty ctx)
+    Clear -> Right (None, withStack S.empty ctx)
     Dot ->
       case S.pop stack of
-        Just (val, stack') -> Right (Just $ show val ++ " ", withStack stack' ctx)
+        Just (val, stack') -> Right (Message $ show val ++ " ", withStack stack' ctx)
         Nothing -> Left "stack underflow"
     DotS -> do
       let stackStr = show (List.reverse $ S.toList stack)
-      Right (Just $ stackStr ++ " <- TOP", ctx)
+      Right (Message $ stackStr ++ " <- TOP", ctx)
     Emit ->
       case S.pop stack of
-        Just (val, stack') -> Right (Just [toEnum (fromIntegral val) :: Char], withStack stack' ctx)
+        Just (val, stack') -> Right (Message [toEnum (fromIntegral val) :: Char], withStack stack' ctx)
         Nothing -> Left "stack underflow"
-    Cr -> Right (Just "\n", ctx)
-    DotString str -> Right (Just str, ctx)
+    Cr -> Right (Message "\n", ctx)
+    DotString str -> Right (Message str, ctx)
+    Exit -> Right (Quit, ctx)
   where
     stack = valueStack ctx
 
@@ -100,18 +105,22 @@ evalWord ctx name callStack =
           name ++ " ?"
 
 evalSequence :: Context -> [FNode] -> [String] -> EvalResult
-evalSequence ctx [] _ = Right (Nothing, ctx)
+evalSequence ctx [] _ = Right (None, ctx)
 evalSequence ctx (node : rest) callStack = do
   result <- eval ctx node callStack
   case result of
     (output, newCtx) -> do
-      restResult <- evalSequence newCtx rest callStack
-      case (output, restResult) of
-        (Nothing, result') -> Right result'
-        (Just out, (Nothing, finalCtx)) ->
-          Right (Just out, finalCtx)
-        (Just out, (Just restOut, finalCtx)) ->
-          Right (Just (out ++ restOut), finalCtx)
+      case output of
+        Quit -> Right (Quit, newCtx)
+        _ -> do
+          restResult <- evalSequence newCtx rest callStack
+          case (output, restResult) of
+            (None, result') -> Right result'
+            (Message out, (None, finalCtx)) ->
+              Right (Message out, finalCtx)
+            (Message out, (Message restOut, finalCtx)) ->
+              Right (Message (out ++ restOut), finalCtx)
+            (_, (Quit, finalCtx)) -> Right (Quit, finalCtx)
 
 evalDoLoop :: Context -> [FNode] -> [String] -> EvalResult
 evalDoLoop ctx loopBody callStack =
@@ -124,26 +133,27 @@ evalDoLoop ctx loopBody callStack =
               then Right (accOutput, currentCtx)
               else do
                 let ctxWithIndex = flip withStack currentCtx $ S.push currentI (valueStack currentCtx)
-
                 result <- evalSequence ctxWithIndex loopBody callStack
 
                 case result of
+                  (Quit, newCtx) -> Right (Quit, newCtx)
                   (iterOutput, newCtx) ->
                     let combinedOutput =
                           case (accOutput, iterOutput) of
-                            (Nothing, Nothing) -> Nothing
-                            (Just out, Nothing) -> Just out
-                            (Nothing, Just iterOut) -> Just iterOut
-                            (Just out, Just iterOut) -> Just (out ++ iterOut)
+                            (None, None) -> None
+                            (Message out, None) -> Message out
+                            (None, Message iterOut) -> Message iterOut
+                            (Message out, Message iterOut) -> Message (out ++ iterOut)
+                            _ -> Quit
                      in loopIteration (currentI + 1) newCtx combinedOutput
-       in loopIteration start loopCtx Nothing
+       in loopIteration start loopCtx None
   where
     stack = valueStack ctx
 
 eval :: Context -> FNode -> [String] -> EvalResult
 eval ctx (Literal expr) cs =
   case expr of
-    FNum num -> Right (Nothing, flip withStack ctx $ S.push num stack)
+    FNum num -> Right (None, flip withStack ctx $ S.push num stack)
     FUnOp op -> evalUnaryOp ctx op
     FBinOp op -> evalBinaryOp ctx op
     FDirective dir -> evalDirective ctx dir
@@ -151,7 +161,7 @@ eval ctx (Literal expr) cs =
   where
     stack = valueStack ctx
 eval ctx (WordDef (Definition name body)) _cs = do
-  Right (Nothing, mapWords (Map.insert name body) ctx)
+  Right (None, mapWords (Map.insert name body) ctx)
 eval ctx (Sequence nodes) cs = evalSequence ctx nodes cs
 eval ctx (IfThenElse thenBranch elseBranch) callStack =
   case S.pop stack of
@@ -172,6 +182,10 @@ evaluate ctx input =
   case parse parseExpressions "" input of
     Left err -> (ctx, Just $ errorBundlePretty err)
     Right expressions ->
-      case eval ctx (debug expressions) [] of
+      case eval ctx expressions [] of
         Left errorMsg -> (ctx, Just errorMsg)
-        Right (output, newDict) -> (newDict, output)
+        Right (output, newDict) ->
+          case output of
+            None -> (newDict, Nothing)
+            Message msg -> (newDict, Just msg)
+            Quit -> (newDict, Nothing)
