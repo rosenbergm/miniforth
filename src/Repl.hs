@@ -16,12 +16,23 @@ import System.IO.Error (isDoesNotExistError)
 
 type ForthM a = ReaderT Context (StateT (S.Stack Integer) IO) a
 
+commands :: [String]
+commands =
+  [ ":help",
+    ":q",
+    ":quit",
+    ":clear",
+    ":words",
+    ":l",
+    ":load"
+  ]
+
 forthCompletion :: CompletionFunc IO
 forthCompletion = completeWord Nothing [] forthCompleter
   where
     forthCompleter :: String -> IO [Completion]
     forthCompleter str = do
-      let matches = filter (List.isPrefixOf str) reservedKeywords
+      let matches = filter (List.isPrefixOf str) (reservedKeywords ++ commands)
       return $ map simpleCompletion matches
 
 settings :: Settings IO
