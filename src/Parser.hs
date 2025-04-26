@@ -50,6 +50,9 @@ data Directive
   | If
   | Else
   | Then
+  | Do
+  | Loop
+  | I
   deriving (Show, Eq)
 
 data Definition = Definition String [FNode]
@@ -67,6 +70,7 @@ data FNode
   = Literal FExp
   | WordDef Definition
   | IfThenElse FNode [FNode] [FNode]
+  | DoLoop [FNode]
   | Sequence [FNode]
   deriving (Show, Eq)
 
@@ -129,6 +133,9 @@ parseDirectiveWord =
     <|> (If <$ symbol "if")
     <|> (Else <$ symbol "else")
     <|> (Then <$ symbol "then")
+    <|> (Do <$ symbol "do")
+    <|> (Loop <$ symbol "loop")
+    <|> (I <$ symbol "i")
 
 parseDirective :: FParser FExp
 parseDirective = do
@@ -140,7 +147,7 @@ parseWordName = try $ some (alphaNumChar <|> symbolChar)
 parseWord :: FParser FExp
 parseWord = do
   name <- parseWordName
-  if name `elem` [":", ";", "dup", "drop", "swap", "over", "rot", "clear", ".s", ".", "emit", "cr", ".\"", "if", "else", "then"]
+  if name `elem` [":", ";", "dup", "drop", "swap", "over", "rot", "clear", ".s", ".", "emit", "cr", ".\"", "if", "else", "then", "do", "loop"]
     then fail $ "unexpected keyword: " ++ name
     else return $ FWord name
 
@@ -163,7 +170,7 @@ parseBlock endMark = do
   exprs <- many $ do
     notFollowedBy endMark
 
-    expr <- try parseIfThenElse <|> parseExpression
+    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
     sc
 
     return expr
@@ -200,9 +207,25 @@ parseIfThenElse = do
 
   return $ IfThenElse condition thenBranch elseBranch
 
+parseDoLoop :: FParser FNode
+parseDoLoop = do
+  _ <- try $ symbol "do"
+  sc
+
+  body <- many $ do
+    notFollowedBy (symbol "loop")
+    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+    sc
+    return expr
+
+  _ <- symbol "loop"
+
+  return $ DoLoop body
+
 parseExpression :: FParser FNode
 parseExpression =
-  try parseIfThenElse
+  try parseDoLoop
+    <|> try parseIfThenElse
     <|> (Literal <$> (parseInteger <|> parseOperator <|> parsePrintString <|> parseDirective <|> parseWord))
 
 sc :: FParser ()
@@ -212,6 +235,7 @@ parseNode :: FParser FNode
 parseNode =
   try parseDefinition
     <|> try parseIfThenElse
+    <|> try parseDoLoop
     <|> parseExpression
 
 parseExpressions :: FParser FNode
