@@ -199,8 +199,6 @@ Creates an infinite loop. The loop body is terminated by the `again` keyword.
 
 Execution can be broken by the `exit` command.
 
-```
-
 ### `exit` - break execution
 
 Breaks the execution of the current word and returns to the REPL.
@@ -214,4 +212,3 @@ interpreter using the `:l` command. Then call the custom word.
 - [`examples/factorial.forth`](examples/factorial.forth) - calculates the factorial of n
 - [`examples/gcd.forth`](examples/gcd.forth) - calculates GCD of two numbers
 - [`examples/count-to.forth`](examples/count-to.forth) - counts to n
-```
