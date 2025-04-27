@@ -7,11 +7,13 @@ import Parser
 import qualified Stack as S
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
+import Util (debug)
 
 data Output
   = None
   | Message String
   | Quit
+  | WordExit (Maybe String)
 
 type EvalResult = Either String (Output, Context)
 
@@ -21,6 +23,7 @@ evalUnaryOp ctx op =
     Just (x, stack') ->
       let result = case op of
             FNeg -> Right $ if x == 0 then -1 else 0
+            FInvert -> Right (-x)
        in case result of
             Left err -> Left err
             Right val -> Right (None, flip withStack ctx $ S.push val stack')
@@ -89,7 +92,7 @@ evalDirective ctx dir =
         Nothing -> Left "stack underflow"
     Cr -> Right (Message "\n", ctx)
     DotString str -> Right (Message str, ctx)
-    Exit -> Right (Quit, ctx)
+    Exit -> Right (WordExit Nothing, ctx)
   where
     stack = valueStack ctx
 
@@ -98,8 +101,14 @@ evalWord ctx name callStack =
   if name `elem` callStack
     then Left $ "recursive call detected: " ++ name
     else case Map.lookup name $ definedWords ctx of
-      Just body ->
-        evalSequence ctx body (name : callStack)
+      Just body -> do
+        result <- evalSequence ctx body (name : callStack)
+        case result of
+          (WordExit msg, newCtx) ->
+            case msg of
+              Just str -> Right (Message str, newCtx)
+              Nothing -> Right (None, newCtx)
+          _ -> Right result
       Nothing ->
         Left $
           name ++ " ?"
@@ -112,6 +121,7 @@ evalSequence ctx (node : rest) callStack = do
     (output, newCtx) -> do
       case output of
         Quit -> Right (Quit, newCtx)
+        WordExit msg -> Right (WordExit msg, newCtx)
         _ -> do
           restResult <- evalSequence newCtx rest callStack
           case (output, restResult) of
@@ -120,6 +130,10 @@ evalSequence ctx (node : rest) callStack = do
               Right (Message out, finalCtx)
             (Message out, (Message restOut, finalCtx)) ->
               Right (Message (out ++ restOut), finalCtx)
+            (Message out, (WordExit Nothing, finalCtx)) ->
+              Right (WordExit (Just out), finalCtx)
+            (Message out, (WordExit (Just exitMsg), finalCtx)) ->
+              Right (WordExit (Just (out ++ exitMsg)), finalCtx)
             (_, (Quit, finalCtx)) -> Right (Quit, finalCtx)
 
 evalDoLoop :: Context -> [FNode] -> [String] -> EvalResult
@@ -150,6 +164,27 @@ evalDoLoop ctx loopBody callStack =
   where
     stack = valueStack ctx
 
+evalBeginAgain :: Context -> [FNode] -> [String] -> EvalResult
+evalBeginAgain ctx loopBody callStack =
+  let loopIteration currentCtx accMsg =
+        case evalSequence currentCtx loopBody callStack of
+          Left err -> Left err
+          Right (WordExit (Just newMsg), newCtx) ->
+            Right (Message (accMsg ++ newMsg), newCtx)
+          Right (WordExit Nothing, newCtx) ->
+            if null accMsg
+              then Right (None, newCtx)
+              else Right (Message accMsg, newCtx)
+          Right (Quit, newCtx) ->
+            if null accMsg
+              then Right (Quit, newCtx)
+              else Right (Message accMsg, newCtx)
+          Right (Message newMsg, newCtx) ->
+            loopIteration newCtx (accMsg ++ newMsg)
+          Right (None, newCtx) ->
+            loopIteration newCtx accMsg
+   in loopIteration ctx ""
+
 eval :: Context -> FNode -> [String] -> EvalResult
 eval ctx (Literal expr) cs =
   case expr of
@@ -176,6 +211,8 @@ eval ctx (IfThenElse thenBranch elseBranch) callStack =
     stack = valueStack ctx
 eval ctx (DoLoop body) cs =
   evalDoLoop ctx body cs
+eval ctx (BeginAgain body) cs =
+  evalBeginAgain ctx body cs
 
 evaluate :: Context -> String -> (Context, Maybe String)
 evaluate ctx input =
@@ -189,3 +226,4 @@ evaluate ctx input =
             None -> (newDict, Nothing)
             Message msg -> (newDict, Just msg)
             Quit -> (newDict, Nothing)
+            WordExit msg -> (newDict, msg)

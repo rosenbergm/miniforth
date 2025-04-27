@@ -14,7 +14,7 @@ import Control.Applicative
 import Control.Monad (when)
 import qualified Data.Set as Set
 import Data.Void (Void)
-import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, notFollowedBy), Parsec, choice, fancyFailure, manyTill, option, skipMany, skipSome, try)
+import Text.Megaparsec (ErrorFancy (..), MonadParsec (eof, notFollowedBy), Parsec, choice, fancyFailure, manyTill, oneOf, option, skipMany, skipSome, try)
 import Text.Megaparsec.Char (alphaNumChar, char, digitChar, printChar, spaceChar, string', symbolChar)
 import Text.Megaparsec.Char.Lexer (skipLineComment)
 
@@ -33,7 +33,9 @@ data FBinOperator
   | FOr
   deriving (Show, Eq)
 
-data FUnOperator = FNeg
+data FUnOperator
+  = FNeg
+  | FInvert
   deriving (Show, Eq)
 
 data Directive
@@ -67,6 +69,7 @@ data FNode
   | WordDef Definition
   | IfThenElse [FNode] [FNode]
   | DoLoop [FNode]
+  | BeginAgain [FNode]
   | Sequence [FNode]
   deriving (Show, Eq)
 
@@ -98,7 +101,7 @@ parseBinaryOperator =
     <|> (FOr <$ string' "or")
 
 parseUnaryOperator :: FParser FUnOperator
-parseUnaryOperator = FNeg <$ string' "invert"
+parseUnaryOperator = (FNeg <$ string' "invert") <|> (FInvert <$ string' "neg")
 
 parseOperator :: FParser FExp
 parseOperator = do
@@ -154,11 +157,18 @@ reservedKeywords =
     "then",
     "do",
     "loop",
-    "exit"
+    "exit",
+    "begin",
+    "again",
+    "invert",
+    "neg"
   ]
 
+wordPunct :: FParser Char
+wordPunct = oneOf ['-', '_', '?']
+
 parseWordName :: FParser String
-parseWordName = some (alphaNumChar <|> symbolChar)
+parseWordName = some (alphaNumChar <|> symbolChar <|> wordPunct)
 
 parseWord :: FParser FExp
 parseWord = do
@@ -203,7 +213,7 @@ parseUntil :: [FParser String] -> FParser [FNode]
 parseUntil endMarks = do
   many $ do
     notFollowedBy (choice endMarks)
-    expr <- try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+    expr <- try parseIfThenElse <|> try parseDoLoop <|> try parseBeginAgain <|> parseExpression
     sc
     return expr
 
@@ -238,6 +248,17 @@ parseDoLoop = do
 
   return $ DoLoop body
 
+parseBeginAgain :: FParser FNode
+parseBeginAgain = do
+  _ <- try $ symbol "begin"
+  sc
+
+  body <- parseUntil [symbol "again"]
+
+  _ <- symbol "again"
+
+  return $ BeginAgain body
+
 parseExpression :: FParser FNode
 parseExpression =
   Literal
@@ -252,7 +273,7 @@ sc :: FParser ()
 sc = skipMany (skipSome spaceChar <|> skipLineComment "\\")
 
 parseNode' :: FParser FNode
-parseNode' = try parseIfThenElse <|> try parseDoLoop <|> parseExpression
+parseNode' = try parseIfThenElse <|> try parseDoLoop <|> try parseBeginAgain <|> parseExpression
 
 parseNode :: FParser FNode
 parseNode =

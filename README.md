@@ -80,9 +80,17 @@ Prints a newline.
 
 Performs arithmetic operations on the top two elements of the stack. The result is pushed back onto the stack.
 
+### `neg` - arithmetic negation
+
+Negates the top element of the stack.
+
 ### `<`, `>`, `=` - comparison operations
 
 Performs comparison operations on the top two elements of the stack. The result is pushed back onto the stack as a boolean value (-1 if true, 0 if false).
+
+### `and`, `or`, `invert` - logical operations
+
+Standard logical operations on the top two elements of the stack. The result is pushed back onto the stack.
 
 ### `dup` - duplicate top
 
@@ -170,7 +178,7 @@ Top was not zero
 Top was zero
 ```
 
-### `do` - loop
+### `do - loop` - indexed loop
 
 Loops over a range of the top two numbers (top is the start index, second is the end).
 The index is automatically pushed onto the stack at the beginning of each iteration.
@@ -185,6 +193,14 @@ ok
 21
 ```
 
+### `begin - again` - infinite loop
+
+Creates an infinite loop. The loop body is terminated by the `again` keyword.
+
+Execution can be broken by the `exit` command.
+
+```
+
 ### `exit` - break execution
 
 Breaks the execution of the current word and returns to the REPL.
@@ -196,3 +212,6 @@ interpreter using the `:l` command. Then call the custom word.
 
 - [`examples/fib.forth`](examples/fib.forth) - calculates the n'th Fibonacci number
 - [`examples/factorial.forth`](examples/factorial.forth) - calculates the factorial of n
+- [`examples/gcd.forth`](examples/gcd.forth) - calculates GCD of two numbers
+- [`examples/count-to.forth`](examples/count-to.forth) - counts to n
+```
