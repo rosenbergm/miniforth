@@ -24,6 +24,7 @@ helpMsg =
   \:q or :quit - exit the interpreter\n\
   \:clear - clear the stack\n\
   \:words - show defined words\n\
+  \:r - reload loaded file\n\
   \:l <path> or :load <path> - load a file\n"
 
 commands :: [String]
@@ -82,6 +83,15 @@ repl = runReaderT replLoop Context.empty
           (":l", args) -> do
             ctx <- ask
             loadFile args ctx
+          (":r", _) -> do
+            ctx <- ask
+            case loadedFile ctx of
+              Nothing -> do
+                liftIO $ putStrLn "no file loaded"
+                replWithStack
+              Just path -> do
+                liftIO $ putStrLn $ "reloading file " ++ path
+                loadFile [path] ctx
           (":h", _) -> do
             liftIO $ putStrLn helpMsg
           (":help", _) -> do
@@ -131,7 +141,7 @@ repl = runReaderT replLoop Context.empty
 
           case result of
             Right (file, handle) -> do
-              let (newCtx, evalResult) = evaluate ctx file
+              let (newCtx, evalResult) = evaluate (withFile (Just path) ctx) file
               liftIO $ putStrLn $ Maybe.fromMaybe "ok" evalResult
               liftIO $ hClose handle
               local (const newCtx) replWithStack

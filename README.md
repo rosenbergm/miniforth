@@ -25,6 +25,7 @@ stack run
 - `:q|:quit` quits the interpreter
 - `:l|:load <filename>` loads a file with Forth code, executes it and brings
   all defined words into scope
+- `:r` reloads the last loaded file
 - `:clear` clears the stack
 - `:words` lists all defined words
 
