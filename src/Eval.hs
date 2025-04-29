@@ -7,12 +7,10 @@ import Parser
 import qualified Stack as S
 import Text.Megaparsec (parse)
 import Text.Megaparsec.Error (errorBundlePretty)
-import Util (debug)
 
 data Output
   = None
   | Message String
-  | Quit
   | WordExit (Maybe String)
 
 type EvalResult = Either String (Output, Context)
@@ -120,7 +118,6 @@ evalSequence ctx (node : rest) callStack = do
   case result of
     (output, newCtx) -> do
       case output of
-        Quit -> Right (Quit, newCtx)
         WordExit msg -> Right (WordExit msg, newCtx)
         _ -> do
           restResult <- evalSequence newCtx rest callStack
@@ -134,7 +131,6 @@ evalSequence ctx (node : rest) callStack = do
               Right (WordExit (Just out), finalCtx)
             (Message out, (WordExit (Just exitMsg), finalCtx)) ->
               Right (WordExit (Just (out ++ exitMsg)), finalCtx)
-            (_, (Quit, finalCtx)) -> Right (Quit, finalCtx)
 
 evalDoLoop :: Context -> [FNode] -> [String] -> EvalResult
 evalDoLoop ctx loopBody callStack =
@@ -150,7 +146,6 @@ evalDoLoop ctx loopBody callStack =
                 result <- evalSequence ctxWithIndex loopBody callStack
 
                 case result of
-                  (Quit, newCtx) -> Right (Quit, newCtx)
                   (iterOutput, newCtx) ->
                     let combinedOutput =
                           case (accOutput, iterOutput) of
@@ -158,7 +153,7 @@ evalDoLoop ctx loopBody callStack =
                             (Message out, None) -> Message out
                             (None, Message iterOut) -> Message iterOut
                             (Message out, Message iterOut) -> Message (out ++ iterOut)
-                            _ -> Quit
+                            _ -> WordExit Nothing
                      in loopIteration (currentI + 1) newCtx combinedOutput
        in loopIteration start loopCtx None
   where
@@ -174,10 +169,6 @@ evalBeginAgain ctx loopBody callStack =
           Right (WordExit Nothing, newCtx) ->
             if null accMsg
               then Right (None, newCtx)
-              else Right (Message accMsg, newCtx)
-          Right (Quit, newCtx) ->
-            if null accMsg
-              then Right (Quit, newCtx)
               else Right (Message accMsg, newCtx)
           Right (Message newMsg, newCtx) ->
             loopIteration newCtx (accMsg ++ newMsg)
@@ -225,5 +216,4 @@ evaluate ctx input =
           case output of
             None -> (newDict, Nothing)
             Message msg -> (newDict, Just msg)
-            Quit -> (newDict, Nothing)
             WordExit msg -> (newDict, msg)
